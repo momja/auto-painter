@@ -1,0 +1,7 @@
+README.md
+setup.py
+gym_painting.egg-info/PKG-INFO
+gym_painting.egg-info/SOURCES.txt
+gym_painting.egg-info/dependency_links.txt
+gym_painting.egg-info/requires.txt
+gym_painting.egg-info/top_level.txt
