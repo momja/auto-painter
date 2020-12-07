@@ -21,7 +21,6 @@ class Renderer:
     def update_render(self, template, canvas):
         # Combine template and canvas to one image
         combined_img = np.hstack([template, canvas])
-        print(combined_img.shape)
         self.w_fd.send(combined_img)
 
 
@@ -45,8 +44,6 @@ class Renderer:
     @staticmethod
     def _update_render(r_fd, panel, root):
         # update view
-        print("waiting for update")
-        print("new image received")
         try:
             img = r_fd.recv()
         except EOFError:
