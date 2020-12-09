@@ -126,15 +126,22 @@ class PaintingEnv(gym.Env):
         - previous color
         """
         x, y = self.cur_state["pos"]
-        obs = np.zeros((spaces.flatdim(self.observation_space)))
+        
+        # obs = np.zeros((spaces.flatdim(self.observation_space)))
+        # obs = np.hstack((
+        #     self._get_template_patch(x, y).flatten(),
+        #     self.cur_state["motion"],
+        #     self.cur_state["color"],
+        #     self.cur_state["pendown"]
+        # ))
+        # return np.asarray(obs)
+        obs = OrderedDict()
 
-        obs = np.hstack((
-            self._get_template_patch(x, y).flatten(),
-            self.cur_state["motion"],
-            self.cur_state["color"],
-            self.cur_state["pendown"]
-        ))
-        return np.asarray(obs)
+        obs["patch"] = self._get_template_patch(x, y)
+        obs["motion"] = self.cur_state["motion"]
+        obs["color"] = self.cur_state["color"]
+        obs["pendown"] = self.cur_state["pendown"]
+        return obs
 
     def _get_template_patch(self, x, y):
         return self.template[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
