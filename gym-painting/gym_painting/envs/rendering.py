@@ -2,6 +2,7 @@ from tkinter import *
 from PIL import ImageTk, Image
 from multiprocessing import Process,Pipe
 import numpy as np
+import cv2
 
 class Renderer:
     def __init__(self):
@@ -14,12 +15,14 @@ class Renderer:
 
 
     def close_server(self):
-        self.r_fd.close
+        self.w_fd.close()
+        self.r_fd.close()
         self.p.join()
 
     
-    def update_render(self, template, canvas):
+    def update_render(self, template, canvas, cur_pos):
         # Combine template and canvas to one image
+        canvas = cv2.circle(canvas, cur_pos, 2, (255,255,255), -1)
         combined_img = np.hstack([template, canvas])
         self.w_fd.send(combined_img)
 

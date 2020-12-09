@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 OBS_FRAME_SHAPE = (31, 31, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 100
+EPISODE_SIZE = 5000
 
 
 class PaintingEnv(gym.Env):
@@ -29,7 +29,7 @@ class PaintingEnv(gym.Env):
 
     """
 
-    metadata = {"render.modes": ["rgb_array"]}
+    metadata = {"render.modes": ["rgb_array", "human"]}
 
     def __init__(self):
         self.__version__ = "0.1.0"
@@ -40,15 +40,11 @@ class PaintingEnv(gym.Env):
         self.state_history = []
         self.action_history = []
         self.painter = Painter()
-        self.renderer = Renderer()
+        self.renderer = None
         self._configure_environment()
-        self._start_render_process()
         logger.info(f"PaintingEnv - Version {self.__version__}")
 
         self.cur_step = -1
-
-        self.seed()
-        self.reset()
 
         # -- ACTION SPACE -- #
         # ------------------ #
@@ -80,6 +76,9 @@ class PaintingEnv(gym.Env):
                 "pendown": brush_space,
             }
         )
+
+        self.seed()
+        self.reset()
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -127,17 +126,23 @@ class PaintingEnv(gym.Env):
         - previous color
         """
         x, y = self.cur_state["pos"]
+        obs = np.zeros((spaces.flatdim(self.observation_space)))
 
-        obs = OrderedDict()
-
-        obs["patch"] = self._get_template_patch(x, y)
-        obs["motion"] = self.cur_state["motion"]
-        obs["color"] = self.cur_state["color"]
-        obs["pendown"] = self.cur_state["pendown"]
-        return obs
+        obs = np.hstack((
+            self._get_template_patch(x, y).flatten(),
+            self.cur_state["motion"],
+            self.cur_state["color"],
+            self.cur_state["pendown"]
+        ))
+        return np.asarray(obs)
 
     def _get_template_patch(self, x, y):
         return self.template[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
+
+    def _get_canvas_patch(self, x, y):
+        start_y, start_x = y - OBS_FRAME_SHAPE[1]//2, y - OBS_FRAME_SHAPE[0]//2
+        end_y, end_x = y + OBS_FRAME_SHAPE[1]//2 + 1, y + OBS_FRAME_SHAPE[0]//2 + 1
+        return self.canvas[start_y:end_y, start_x:end_x]
 
     def step(self, action):
         """
@@ -163,7 +168,10 @@ class PaintingEnv(gym.Env):
         terminal_state = (
             self.cur_step > EPISODE_SIZE or self.canvas[self.canvas == 0].size == 0
         )
-        print(terminal_state)
+
+        if (terminal_state):
+            self.renderer.close_server()
+
         return self._get_obs(), reward, terminal_state, {}
 
     def _compute_gradient(img):
@@ -178,10 +186,20 @@ class PaintingEnv(gym.Env):
         with the true painting
 
         """
-        return 0
+        x, y = self.cur_state["pos"]
+        return 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
+
+    def _unflatten_action(self, flat_action):
+        return OrderedDict(
+            ("color", flat_action[:4]),
+            ("motion", flat_action[4:7]),
+            ("pendown", round(flat_action[7]))
+        )
 
     def _take_action(self, action):
         """"""
+
+        action = self._unflatten_action(action)
 
         max_y, max_x = self.template_rgb.shape[0] - 1, self.template_rgb.shape[1] - 1
         direction, distance, radius = action["motion"]
@@ -203,8 +221,6 @@ class PaintingEnv(gym.Env):
             "color": np.clip(prev_state["color"] + action["color"], 0, 1),
             "pendown": prev_state["pendown"] ^ action["pendown"],
         }
-        # import code
-        # code.interact(local=locals())
         self.cur_state = new_state
         self.state_history.append(prev_state)
         self.action_history.append(action)
@@ -234,13 +250,17 @@ class PaintingEnv(gym.Env):
         canvas and template.
 
         """
-        if self.renderer:
-            self.renderer.start_server()
+        self.renderer = Renderer()
+        self.renderer.start_server()
 
     def render(self, mode="rgb_array"):
-        if self.renderer:
+        if mode == "rgb_array":
+            return self.canvas
+        elif mode == "human":
+            if not self.renderer:
+                self._start_render_process()
             self.renderer.update_render(
-                self.template_rgb, (self.canvas * 255).astype(np.uint8)
+                self.template_rgb, (self.canvas * 255).astype(np.uint8), tuple(self.cur_state["pos"])
             )
 
     def _update_canvas(self, start_state=0, end_state=None):
