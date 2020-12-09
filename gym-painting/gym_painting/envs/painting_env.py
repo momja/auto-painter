@@ -49,32 +49,40 @@ class PaintingEnv(gym.Env):
         # -- ACTION SPACE -- #
         # ------------------ #
 
-        color_space = spaces.Box(
-            np.array([-0.1, -0.1, -0.1]), np.array([0.1, 0.1, 0.1])
-        )  # (hue, saturation, value)
-        motion_space = spaces.Box(
-            np.array([-math.pi, 0, -3]), np.array([math.pi, 20, 3])
-        )  # (direction, distance, radius)
-        brush_space = spaces.Discrete(2)  # (pen up, pen down)
-        self.action_space = spaces.Dict(
-            {"color": color_space, "motion": motion_space, "pendown": brush_space}
+        # color_space = spaces.Box(
+        #     np.array([-0.1, -0.1, -0.1]), np.array([0.1, 0.1, 0.1])
+        # )  # (hue, saturation, value)
+        # motion_space = spaces.Box(
+        #     np.array([-math.pi, 0, -3]), np.array([math.pi, 20, 3])
+        # )  # (direction, distance, radius)
+        # brush_space = spaces.Discrete(2)  # (pen up, pen down)
+        # self.action_space = spaces.Dict(
+        #     {"color": color_space, "motion": motion_space, "pendown": brush_space}
+        # )
+        self.action_space = spaces.Box(
+            np.array([-0.1,-0.1,-0.1,-math.pi,0,-3,0],
+            np.array([0.1,0.1,0.1,math.pi,20,3,1]))
         )
 
         # -- OBSERVATION SPACE -- #
         # ----------------------- #
 
-        img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
-        pen_down = spaces.Discrete(2)
-        motion_space = spaces.Box(np.array([0, 1]), np.array([2 * math.pi, 10]))
-        color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]))
+        # img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
+        # pen_down = spaces.Discrete(2)
+        # motion_space = spaces.Box(np.array([0, 1]), np.array([2 * math.pi, 10]))
+        # color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]))
 
-        self.observation_space = spaces.Dict(
-            {
-                "patch": img_patch_space,
-                "color": color_space,
-                "motion": motion_space,
-                "pendown": brush_space,
-            }
+        # self.observation_space = spaces.Dict(
+        #     {
+        #         "patch": img_patch_space,
+        #         "color": color_space,
+        #         "motion": motion_space,
+        #         "pendown": brush_space,
+        #     }
+        # )
+        self.observation_space = spaces.Box(
+            np.array([0,1,0,0,0,0]),
+            np.array([2*math.pi,10,1,1,1,1])
         )
 
         self.seed()
@@ -126,22 +134,22 @@ class PaintingEnv(gym.Env):
         - previous color
         """
         x, y = self.cur_state["pos"]
-        
-        # obs = np.zeros((spaces.flatdim(self.observation_space)))
-        # obs = np.hstack((
-        #     self._get_template_patch(x, y).flatten(),
-        #     self.cur_state["motion"],
-        #     self.cur_state["color"],
-        #     self.cur_state["pendown"]
-        # ))
-        # return np.asarray(obs)
-        obs = OrderedDict()
 
-        obs["patch"] = self._get_template_patch(x, y)
-        obs["motion"] = self.cur_state["motion"]
-        obs["color"] = self.cur_state["color"]
-        obs["pendown"] = self.cur_state["pendown"]
-        return obs
+        obs = np.zeros((spaces.flatdim(self.observation_space)))
+        obs = np.hstack((
+            self._get_template_patch(x, y).flatten(),
+            self.cur_state["motion"],
+            self.cur_state["color"],
+            self.cur_state["pendown"]
+        ))
+        return np.asarray(obs)
+        # obs = OrderedDict()
+
+        # obs["patch"] = self._get_template_patch(x, y)
+        # obs["motion"] = self.cur_state["motion"]
+        # obs["color"] = self.cur_state["color"]
+        # obs["pendown"] = self.cur_state["pendown"]
+        # return obs
 
     def _get_template_patch(self, x, y):
         return self.template[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
@@ -151,6 +159,13 @@ class PaintingEnv(gym.Env):
         end_y, end_x = y + OBS_FRAME_SHAPE[1]//2 + 1, y + OBS_FRAME_SHAPE[0]//2 + 1
         return self.canvas[start_y:end_y, start_x:end_x]
 
+    def _unflatten_action(self, flat_action):
+        return OrderedDict(
+            ("color", flat_action[:4]),
+            ("motion", flat_action[4:7]),
+            ("pendown", round(flat_action[7]))
+        )
+
     def step(self, action):
         """
         Take action on current state
@@ -158,6 +173,8 @@ class PaintingEnv(gym.Env):
         """
 
         assert self.cur_step <= EPISODE_SIZE
+
+        action = self._unflatten_action(action)
 
         # compute new state
         self._take_action(action)
@@ -206,7 +223,7 @@ class PaintingEnv(gym.Env):
     def _take_action(self, action):
         """"""
 
-        action = self._unflatten_action(action)
+        # action = self._unflatten_action(action)
 
         max_y, max_x = self.template_rgb.shape[0] - 1, self.template_rgb.shape[1] - 1
         direction, distance, radius = action["motion"]
