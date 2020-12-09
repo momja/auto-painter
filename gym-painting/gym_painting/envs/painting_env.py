@@ -159,13 +159,6 @@ class PaintingEnv(gym.Env):
         end_y, end_x = y + OBS_FRAME_SHAPE[1]//2 + 1, y + OBS_FRAME_SHAPE[0]//2 + 1
         return self.canvas[start_y:end_y, start_x:end_x]
 
-    def _unflatten_action(self, flat_action):
-        return OrderedDict(
-            ("color", flat_action[:4]),
-            ("motion", flat_action[4:7]),
-            ("pendown", round(flat_action[7]))
-        )
-
     def step(self, action):
         """
         Take action on current state
@@ -173,8 +166,6 @@ class PaintingEnv(gym.Env):
         """
 
         assert self.cur_step <= EPISODE_SIZE
-
-        action = self._unflatten_action(action)
 
         # compute new state
         self._take_action(action)
@@ -223,7 +214,7 @@ class PaintingEnv(gym.Env):
     def _take_action(self, action):
         """"""
 
-        # action = self._unflatten_action(action)
+        action = self._unflatten_action(action)
 
         max_y, max_x = self.template_rgb.shape[0] - 1, self.template_rgb.shape[1] - 1
         direction, distance, radius = action["motion"]
