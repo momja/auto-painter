@@ -60,31 +60,32 @@ class PaintingEnv(gym.Env):
         #     {"color": color_space, "motion": motion_space, "pendown": brush_space}
         # )
         self.action_space = spaces.Box(
-            np.array([-0.1,-0.1,-0.1,-math.pi,0,-3,0],
-            np.array([0.1,0.1,0.1,math.pi,20,3,1]))
+            np.array([-0.1,-0.1,-0.1,-math.pi,0,-3,0]),
+            np.array([0.1,0.1,0.1,math.pi,20,3,1])
         )
 
         # -- OBSERVATION SPACE -- #
         # ----------------------- #
 
-        # img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
-        # pen_down = spaces.Discrete(2)
-        # motion_space = spaces.Box(np.array([0, 1]), np.array([2 * math.pi, 10]))
-        # color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]))
+        img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
+        brush_space = spaces.Discrete(1)
+        motion_space = spaces.Box(np.array([0, 1]), np.array([2 * math.pi, 10]))
+        color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]))
 
-        # self.observation_space = spaces.Dict(
-        #     {
-        #         "patch": img_patch_space,
-        #         "color": color_space,
-        #         "motion": motion_space,
-        #         "pendown": brush_space,
-        #     }
-        # )
-        self.observation_space = spaces.Box(
-            np.array([0,1,0,0,0,0]),
-            np.array([2*math.pi,10,1,1,1,1])
+        self.observation_space = spaces.Dict(
+             {
+                 "patch": img_patch_space,
+                 "color": color_space,
+                 "motion": motion_space,
+                 "pendown": brush_space,
+             }
         )
-
+        #self.observation_space = spaces.Box(
+        #    np.array([0,1,0,0,0,0]),
+        #    np.array([2*math.pi,10,1,1,1,1])
+        #)
+        self.observation_space = spaces.flatten_space(self.observation_space)
+        
         self.seed()
         self.reset()
 
@@ -123,7 +124,7 @@ class PaintingEnv(gym.Env):
         self.template = np.pad(
             self.template, ((pad_h, pad_h), (pad_w, pad_w), (0, 0)), "constant"
         )
-        self.canvas = np.zeros_like(self.template_rgb, dtype=np.float)
+        self.canvas = np.zeros_like(self.template, dtype=np.float)
 
     def _get_obs(self):
         """
@@ -155,9 +156,7 @@ class PaintingEnv(gym.Env):
         return self.template[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
 
     def _get_canvas_patch(self, x, y):
-        start_y, start_x = y - OBS_FRAME_SHAPE[1]//2, y - OBS_FRAME_SHAPE[0]//2
-        end_y, end_x = y + OBS_FRAME_SHAPE[1]//2 + 1, y + OBS_FRAME_SHAPE[0]//2 + 1
-        return self.canvas[start_y:end_y, start_x:end_x]
+        return self.canvas[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
 
     def step(self, action):
         """
@@ -185,7 +184,8 @@ class PaintingEnv(gym.Env):
         )
 
         if (terminal_state):
-            self.renderer.close_server()
+            if self.renderer:
+                self.renderer.close_server()
 
         return self._get_obs(), reward, terminal_state, {}
 
@@ -206,9 +206,9 @@ class PaintingEnv(gym.Env):
 
     def _unflatten_action(self, flat_action):
         return OrderedDict(
-            ("color", flat_action[:4]),
-            ("motion", flat_action[4:7]),
-            ("pendown", round(flat_action[7]))
+            [("color", flat_action[:3]),
+            ("motion", flat_action[3:6]),
+            ("pendown", round(int(flat_action[6])))]
         )
 
     def _take_action(self, action):
@@ -246,7 +246,7 @@ class PaintingEnv(gym.Env):
         # randomly set position, radius, etc.
         max_y, max_x = self.template.shape[0:2]
         start_pos = np.array([random.randrange(0, max_x), random.randrange(0, max_y)])
-        self.canvas = np.zeros_like(self.template_rgb)
+        self.canvas = np.zeros_like(self.template, dtype=np.float)
         self.cur_state = {
             "pos": start_pos,
             "motion": np.array([0, 1]),
@@ -275,7 +275,7 @@ class PaintingEnv(gym.Env):
             if not self.renderer:
                 self._start_render_process()
             self.renderer.update_render(
-                self.template_rgb, (self.canvas * 255).astype(np.uint8), tuple(self.cur_state["pos"])
+                    self.template_rgb, (self.canvas[OBS_FRAME_SHAPE[1]:-OBS_FRAME_SHAPE[1],OBS_FRAME_SHAPE[0]:-OBS_FRAME_SHAPE[0]] * 255).astype(np.uint8), tuple(self.cur_state["pos"])
             )
 
     def _update_canvas(self, start_state=0, end_state=None):

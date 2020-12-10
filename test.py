@@ -15,12 +15,12 @@ from tf_agents.agents.ddpg import critic_network
 from tf_agents.agents.sac import sac_agent
 from tf_agents.agents.sac import tanh_normal_projection_network
 from tf_agents.environments import suite_gym
-from tf_agents.train import actor
-from tf_agents.train import learner
-from tf_agents.train import triggers
-from tf_agents.train.utils import spec_utils
-from tf_agents.train.utils import strategy_utils
-from tf_agents.train.utils import train_utils
+from tf_agents.experimental.train import actor
+from tf_agents.experimental.train import learner
+from tf_agents.experimental.train import triggers
+from tf_agents.experimental.train.utils import spec_utils
+from tf_agents.experimental.train.utils import strategy_utils
+from tf_agents.experimental.train.utils import train_utils
 from tf_agents.metrics import py_metrics
 from tf_agents.networks import actor_distribution_network
 from tf_agents.policies import greedy_policy
@@ -118,7 +118,7 @@ table = reverb.Table(
     remover=reverb.selectors.Fifo(),
     rate_limiter=reverb.rate_limiters.MinSize(1))
 
-reverb_server = reverb.Server([table])
+reverb_server = reverb.Server([table],port=8000)
 
 reverb_replay = reverb_replay_buffer.ReverbReplayBuffer(
     tf_agent.collect_data_spec,
