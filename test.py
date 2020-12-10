@@ -57,7 +57,7 @@ reward_scale_factor = 1.0 # @param {type:"number"}
 actor_fc_layer_params = (256, 256)
 critic_joint_fc_layer_params = (256, 256)
 
-log_interval = 5000 # @param {type:"integer"}
+log_interval = 5 # @param {type:"integer"}
 
 num_eval_episodes = 20 # @param {type:"integer"}
 eval_interval = 10000 # @param {type:"integer"}

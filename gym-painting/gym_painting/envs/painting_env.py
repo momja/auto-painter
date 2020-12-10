@@ -19,7 +19,7 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (31, 31, 3)  # Area around the current position that the user can view
+OBS_FRAME_SHAPE = (5, 5, 3)  # Area around the current position that the user can view
 EPISODE_SIZE = 5000
 
 
@@ -133,6 +133,7 @@ class PaintingEnv(gym.Env):
         - brush radius
         - previous brush direction
         - previous color
+
         """
         x, y = self.cur_state["pos"]
 
@@ -143,6 +144,14 @@ class PaintingEnv(gym.Env):
             self.cur_state["color"],
             self.cur_state["pendown"]
         ))
+
+        try:
+            assert obs.size == OBS_FRAME_SHAPE[0]*OBS_FRAME_SHAPE[1]*OBS_FRAME_SHAPE[2]+6
+        except:
+            import code
+            code.interact(local=locals())
+
+
         return np.asarray(obs)
         # obs = OrderedDict()
 
@@ -153,9 +162,13 @@ class PaintingEnv(gym.Env):
         # return obs
 
     def _get_template_patch(self, x, y):
+        #assert y + OBS_FRAME_SHAPE[1] <= self.template.shape[0] and
+        #       x + OBS_FRAME_SHAPE[0] <= self.template.shape[1]
         return self.template[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
 
     def _get_canvas_patch(self, x, y):
+        #assert y + OBS_FRAME_SHAPE[1] <= self.template.shape[0] and
+        #       x + OBS_FRAME_SHAPE[0] <= self.template.shape[1]
         return self.canvas[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
 
     def step(self, action):
@@ -236,6 +249,7 @@ class PaintingEnv(gym.Env):
             "color": np.clip(prev_state["color"] + action["color"], 0, 1),
             "pendown": prev_state["pendown"] ^ action["pendown"],
         }
+
         self.cur_state = new_state
         self.state_history.append(prev_state)
         self.action_history.append(action)
@@ -244,7 +258,7 @@ class PaintingEnv(gym.Env):
 
     def reset(self):
         # randomly set position, radius, etc.
-        max_y, max_x = self.template.shape[0:2]
+        max_y, max_x = self.template_rgb.shape[0:2]
         start_pos = np.array([random.randrange(0, max_x), random.randrange(0, max_y)])
         self.canvas = np.zeros_like(self.template, dtype=np.float)
         self.cur_state = {

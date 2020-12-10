@@ -1,4 +1,10 @@
-from tkinter import *
+try:
+    from tkinter import *
+    display_available = True
+except:
+    display_available = False
+    print("cannot use tkinter")
+
 from PIL import ImageTk, Image
 from multiprocessing import Process,Pipe
 import numpy as np
@@ -6,6 +12,8 @@ import cv2
 
 class Renderer:
     def __init__(self):
+        if not display_available:
+            return
         self.r_fd, self.w_fd = Pipe(False)
         self.p = Process(target=Renderer._render_image_server, args=(self.r_fd,))
 
@@ -29,6 +37,8 @@ class Renderer:
 
     @staticmethod
     def _render_image_server(fd_reader):
+        if not display_available:
+            return
         root = Tk()
         root.resizable(True, True)
         try:
@@ -46,6 +56,8 @@ class Renderer:
 
     @staticmethod
     def _update_render(r_fd, panel, root):
+        if not display_available:
+            return
         # update view
         try:
             img = r_fd.recv()
