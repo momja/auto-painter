@@ -200,6 +200,9 @@ class PaintingEnv(gym.Env):
             if self.renderer:
                 self.renderer.close_server()
 
+        import code
+        code.interact(local=locals())
+
         return self._get_obs(), reward, terminal_state, {}
 
     def _compute_gradient(img):
