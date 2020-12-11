@@ -200,9 +200,6 @@ class PaintingEnv(gym.Env):
             if self.renderer:
                 self.renderer.close_server()
 
-        import code
-        code.interact(local=locals())
-
         return self._get_obs(), reward, terminal_state, {}
 
     def _compute_gradient(img):
@@ -220,7 +217,7 @@ class PaintingEnv(gym.Env):
         x, y = self.cur_state["pos"]
         local_patch = 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
         full_reward = 1/(np.linalg.norm(self.template - self.canvas))
-        pendown_punisher = 1 - self.cur_state["pendown"]
+        pendown_punisher = self.cur_state["pendown"]
         return local_patch + full_reward + pendown_punisher
 
     def _unflatten_action(self, flat_action):
