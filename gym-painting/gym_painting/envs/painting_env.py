@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 OBS_FRAME_SHAPE = (15, 15, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 1000
+EPISODE_SIZE = 5000
 
 
 class PaintingEnv(gym.Env):
@@ -60,8 +60,8 @@ class PaintingEnv(gym.Env):
         #     {"color": color_space, "motion": motion_space, "pendown": brush_space}
         # )
         self.action_space = spaces.Box(
-            np.array([-0.1,-0.1,-0.1,-math.pi,0,-3,0]),
-            np.array([0.1,0.1,0.1,math.pi,20,3,1])
+            np.array([-0.3,-0.3,-0.3,-math.pi,0,-3,0]),
+            np.array([0.3,0.3,0.3,math.pi,50,3,1])
         )
 
         # -- OBSERVATION SPACE -- #
@@ -217,14 +217,14 @@ class PaintingEnv(gym.Env):
 
         """
         x, y = self.cur_state["pos"]
-        local_patch = 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
-        full_reward = 1/(np.linalg.norm(self.template - self.canvas))
+        local_patch = -np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y))
+        full_reward = -np.linalg.norm(self.template - self.canvas)
         pendown_punisher = self.cur_state["pendown"]
         if len(self.state_history) > 1:
             longline_reward = np.linalg.norm(self.cur_state["pos"] - self.state_history[-2]["pos"])
         else:
             longline_reward = 0
-        return 10*local_patch + 1*full_reward + 0.1*pendown_punisher + 0.1*longline_reward
+        return 50*local_patch + 1*full_reward + 0.1*pendown_punisher + 0.1*longline_reward
 
     def _unflatten_action(self, flat_action):
         return OrderedDict(
