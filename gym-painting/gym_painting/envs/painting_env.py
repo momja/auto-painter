@@ -19,8 +19,8 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (3, 3, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 500
+OBS_FRAME_SHAPE = (15, 15, 3)  # Area around the current position that the user can view
+EPISODE_SIZE = 5000
 
 
 class PaintingEnv(gym.Env):
@@ -101,7 +101,7 @@ class PaintingEnv(gym.Env):
         """
         self._start_painter()
 
-    def _start_painter(self, painting_name="smiley.png"):
+    def _start_painter(self, painting_name="the_starry_night_sm.jpg"):
         """
         Given a painting filepath, create a new painting server
 
@@ -179,6 +179,9 @@ class PaintingEnv(gym.Env):
 
         assert self.cur_step <= EPISODE_SIZE
 
+        # compute loss
+        prev_loss = self._compute_loss()
+
         # compute new state
         self._take_action(action)
 
@@ -186,8 +189,10 @@ class PaintingEnv(gym.Env):
         if len(self.state_history) > 1:
             self._update_canvas(start_state=len(self.state_history)-2)
 
+        cur_loss = self._compute_loss()
+
         # compute reward
-        reward = self._get_reward()
+        reward = self._get_reward(prev_loss, cur_loss)
 
         self.cur_step += 1
 
@@ -203,28 +208,39 @@ class PaintingEnv(gym.Env):
 
         return self._get_obs(), reward, terminal_state, {}
 
+    def _compute_loss(self):
+        return np.linalg.norm(self.canvas - self.template)
+
     def _compute_gradient(img):
         """
         Computes the gradient of an image with a specified filter size. Returns gradients in the X and Y direction
         """
         pass
 
-    def _get_reward(self):
+    def _get_reward(self, prev_loss, cur_loss):
         """
         Given the current state, compute the reward.
         Reward is given based on color, radius, and trajectory matching
         with the true painting
 
         """
-        x, y = self.cur_state["pos"]
-        local_patch = -np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y))
-        full_reward = -np.linalg.norm(self.template - self.canvas)
-        pendown_punisher = self.cur_state["pendown"]
-        if len(self.state_history) > 1:
-            longline_reward = np.linalg.norm(self.cur_state["pos"] - self.state_history[-2]["pos"])
-        else:
-            longline_reward = 0
-        return 50*local_patch + 1*full_reward + 0.1*pendown_punisher + 0.1*longline_reward
+
+        # L_{t} - L_{t+1} where L is the loss at a timestep
+        # and t+1 is the current time step
+        return prev_loss - cur_loss
+
+        # x, y = self.cur_state["pos"]
+        # local_patch = -np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y))
+        # full_reward = -np.linalg.norm(self.template - self.canvas)
+        # pendown_punisher = self.cur_state["pendown"]
+        # if len(self.state_history) > 1:
+        #     longline_reward = np.linalg.norm(self.cur_state["pos"] - self.state_history[-2]["pos"])
+        # else:
+        #     longline_reward = 0
+        # return (10*local_patch +
+        #        0.0*full_reward + 
+        #        1.0*pendown_punisher + 
+        #        0.0*longline_reward)
 
     def _unflatten_action(self, flat_action):
         return OrderedDict(
