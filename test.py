@@ -30,7 +30,7 @@ from tf_agents.replay_buffers import reverb_replay_buffer
 from tf_agents.replay_buffers import reverb_utils
 
 tempdir = tempfile.gettempdir()
-
+print(tempdir)
 env_name = "Painter-v0"
 collect_env = suite_gym.load(env_name)
 eval_env = suite_gym.load(env_name)
@@ -38,7 +38,7 @@ eval_env = suite_gym.load(env_name)
 
 # Use "num_iterations = 1e6" for better results (2 hrs)
 # 1e5 is just so this doesn't take too long (1 hr)
-num_iterations = 1000 # @param {type:"integer"}
+num_iterations = 10000 # @param {type:"integer"}
 
 initial_collect_steps = 10000 # @param {type:"integer"}
 collect_steps_per_iteration = 1 # @param {type:"integer"}
@@ -57,14 +57,14 @@ reward_scale_factor = 1.0 # @param {type:"number"}
 actor_fc_layer_params = (256, 256)
 critic_joint_fc_layer_params = (256, 256)
 
-log_interval = 5 # @param {type:"integer"}
+log_interval = 10 # @param {type:"integer"}
 
 num_eval_episodes = 20 # @param {type:"integer"}
 eval_interval = 10000 # @param {type:"integer"}
 
 policy_save_interval = 5000
 
-use_gpu = False
+use_gpu = True
 strategy = strategy_utils.get_strategy(tpu=False, use_gpu=use_gpu)
 
 observation_spec, action_spec, time_step_spec = (
@@ -232,7 +232,7 @@ for _ in range(num_iterations):
     returns.append(metrics["AverageReturn"])
 
   if log_interval and step % log_interval == 0:
-    print('step = {0}: loss = {1}'.format(step, loss_info.loss.numpy()))
+      print('step = {0}: loss = {1}'.format(step, loss_info.loss.numpy()))
 
 rb_observer.close()
 reverb_server.stop()

@@ -19,8 +19,8 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (5, 5, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 100
+OBS_FRAME_SHAPE = (15, 15, 3)  # Area around the current position that the user can view
+EPISODE_SIZE = 1000
 
 
 class PaintingEnv(gym.Env):
@@ -215,7 +215,10 @@ class PaintingEnv(gym.Env):
 
         """
         x, y = self.cur_state["pos"]
-        return 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
+        local_patch = 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
+        full_reward = 1/(np.linalg.norm(self.template - self.canvas))
+        pendown_punisher = 1 - self.cur_state["pendown"]
+        return local_patch + full_reward + pendown_punisher
 
     def _unflatten_action(self, flat_action):
         return OrderedDict(
