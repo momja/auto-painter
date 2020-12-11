@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 OBS_FRAME_SHAPE = (5, 5, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 5000
+EPISODE_SIZE = 100
 
 
 class PaintingEnv(gym.Env):
@@ -221,7 +221,7 @@ class PaintingEnv(gym.Env):
         return OrderedDict(
             [("color", flat_action[:3]),
             ("motion", flat_action[3:6]),
-            ("pendown", round(int(flat_action[6])))]
+            ("pendown", int(round(flat_action[6])))]
         )
 
     def _take_action(self, action):
