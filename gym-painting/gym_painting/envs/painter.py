@@ -37,6 +37,10 @@ class Painter:
 
 
     def _line_interp(self, img, start, end, c1, c2, r1=5, r2=5):
+        """
+        
+        """
+
         line_iter = list(zip(*line(*start, *end)))
         for i, pt in enumerate(line_iter):
             alpha = i / len(line_iter)

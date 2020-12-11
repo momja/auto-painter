@@ -220,7 +220,11 @@ class PaintingEnv(gym.Env):
         local_patch = 1/(np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y)))
         full_reward = 1/(np.linalg.norm(self.template - self.canvas))
         pendown_punisher = self.cur_state["pendown"]
-        return local_patch + full_reward + pendown_punisher
+        if len(self.state_history) > 1:
+            longline_reward = np.linalg.norm(self.cur_state["pos"] - self.state_history[-2]["pos"])
+        else:
+            longline_reward = 0
+        return 10*local_patch + 1*full_reward + 0.1*pendown_punisher + 0.1*longline_reward
 
     def _unflatten_action(self, flat_action):
         return OrderedDict(
