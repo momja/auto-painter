@@ -183,7 +183,8 @@ class PaintingEnv(gym.Env):
         self._take_action(action)
 
         # update canvas with new state
-        self._update_canvas(start_state=-1)
+        if len(self.state_history) > 1:
+            self._update_canvas(start_state=len(self.state_history)-2)
 
         # compute reward
         reward = self._get_reward()
@@ -206,6 +207,7 @@ class PaintingEnv(gym.Env):
         """
         Computes the gradient of an image with a specified filter size. Returns gradients in the X and Y direction
         """
+        pass
 
     def _get_reward(self):
         """
@@ -317,11 +319,11 @@ class PaintingEnv(gym.Env):
         """
         if not end_state:
             self.canvas = self.painter.paint_from_states(
-                self.state_history, shape=self.canvas.shape
+                    self.state_history[start_state:], canvas=self.canvas
             )
         else:
             self.canvas = self.painter.paint_from_states(
-                self.state_history, shape=self.canvas.shape
+                    self.state_history[start_state:end_state], canvas=self.canvas
             )
         return self.canvas
 

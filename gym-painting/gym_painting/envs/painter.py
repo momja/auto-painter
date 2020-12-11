@@ -10,10 +10,9 @@ class Painter:
         """
 
         assert canvas is not None or shape is not None
-
-        height, width, channels = shape
-
+        
         if canvas is None:
+            height, width, channels = shape
             canvas = np.zeros((height, width, channels), dtype=np.float)
 
 

@@ -218,8 +218,9 @@ tf_agent.train_step_counter.assign(0)
 avg_return = get_eval_metrics()["AverageReturn"]
 returns = [avg_return]
 
-for _ in range(num_iterations):
+for iteration in range(num_iterations):
   # Training.
+  print(iteration)
   collect_actor.run()
   loss_info = agent_learner.run(iterations=1)
 
