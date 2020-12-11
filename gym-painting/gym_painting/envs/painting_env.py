@@ -19,8 +19,8 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (15, 15, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 5000
+OBS_FRAME_SHAPE = (3, 3, 3)  # Area around the current position that the user can view
+EPISODE_SIZE = 500
 
 
 class PaintingEnv(gym.Env):
@@ -101,7 +101,7 @@ class PaintingEnv(gym.Env):
         """
         self._start_painter()
 
-    def _start_painter(self, painting_name="the_starry_night_sm.jpg"):
+    def _start_painter(self, painting_name="smiley.png"):
         """
         Given a painting filepath, create a new painting server
 
