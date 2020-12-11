@@ -284,7 +284,9 @@ class PaintingEnv(gym.Env):
 
     def render(self, mode="rgb_array"):
         if mode == "rgb_array":
-            return self.canvas
+            rgb_canvas = (self.canvas * 255).astype(np.uint8)
+            rgb_canvas = cv2.cvtColor(rgb_canvas, cv2.COLOR_HSV2RGB)
+            return rgb_canvas
         elif mode == "human":
             if not self.renderer:
                 self._start_render_process()
