@@ -38,7 +38,7 @@ eval_env = suite_gym.load(env_name)
 
 # Use "num_iterations = 1e6" for better results (2 hrs)
 # 1e5 is just so this doesn't take too long (1 hr)
-num_iterations = 100000 # @param {type:"integer"}
+num_iterations = 1000 # @param {type:"integer"}
 
 initial_collect_steps = 10000 # @param {type:"integer"}
 collect_steps_per_iteration = 1 # @param {type:"integer"}
@@ -57,7 +57,7 @@ reward_scale_factor = 1.0 # @param {type:"number"}
 actor_fc_layer_params = (256, 256)
 critic_joint_fc_layer_params = (256, 256)
 
-log_interval = 5 # @param {type:"integer"}
+log_interval = 5000 # @param {type:"integer"}
 
 num_eval_episodes = 20 # @param {type:"integer"}
 eval_interval = 10000 # @param {type:"integer"}
@@ -244,3 +244,26 @@ plt.plot(steps, returns)
 plt.ylabel('Average Return')
 plt.xlabel('Step')
 plt.ylim()
+
+def embed_mp4(filename):
+    """Embeds an mp4 file in the notebook."""
+    video = open(filename,'rb').read()
+    b64 = base64.b64encode(video)
+    tag = '''
+              <video width="640" height="480" controls>
+              <source src="data:video/mp4;base64,{0}" type="video/mp4">
+              Your browser does not support the video tag.
+              </video>'''.format(b64.decode())
+
+
+num_episodes = 3
+video_filename = 'sac_minitaur.mp4'
+with imageio.get_writer(video_filename, fps=60) as video:
+    for _ in range(num_episodes):
+        time_step = eval_env.reset()
+        video.append_data(eval_env.render())
+        while not time_step.is_last():
+            action_step = eval_actor.policy.action(time_step)
+            time_step = eval_env.step(action_step.action)
+            video.append_data(eval_env.render())
+embed_mp4(video_filename)
