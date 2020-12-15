@@ -15,14 +15,13 @@ class Painter:
             height, width, channels = shape
             canvas = np.zeros((height, width, channels), dtype=np.float)
 
-
         if len(states) < 2:
             return canvas
 
         prev_state = states[0]
 
         for state in states[1:]:
-            if not state["pendown"] or not prev_state["pendown"]:
+            if not state["motion"][2] or not prev_state["motion"][2]:
                 prev_state = state
                 continue
             canvas = self._line_interp(canvas,

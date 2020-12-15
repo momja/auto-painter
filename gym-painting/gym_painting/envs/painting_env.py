@@ -19,8 +19,9 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (15, 15, 3)  # Area around the current position that the user can view
-EPISODE_SIZE = 5000
+OBS_FRAME_SHAPE = (35, 35, 3)  # Area around the current position that the user can view
+EPISODE_SIZE = 200
+RADIAL_KSIZE = 5
 
 
 class PaintingEnv(gym.Env):
@@ -36,55 +37,51 @@ class PaintingEnv(gym.Env):
         self.viewer = None
         self.template = None
         self.canvas = None
+        self.template_radial_map = None
         self.cur_state = {}
         self.state_history = []
         self.action_history = []
         self.painter = Painter()
         self.renderer = None
+        self._prev_loss = 0
         self._configure_environment()
         logger.info(f"PaintingEnv - Version {self.__version__}")
 
-        self.cur_step = -1
+        self.cur_step = 0
 
         # -- ACTION SPACE -- #
         # ------------------ #
 
-        # color_space = spaces.Box(
-        #     np.array([-0.1, -0.1, -0.1]), np.array([0.1, 0.1, 0.1])
-        # )  # (hue, saturation, value)
-        # motion_space = spaces.Box(
-        #     np.array([-math.pi, 0, -3]), np.array([math.pi, 20, 3])
-        # )  # (direction, distance, radius)
-        # brush_space = spaces.Discrete(2)  # (pen up, pen down)
-        # self.action_space = spaces.Dict(
-        #     {"color": color_space, "motion": motion_space, "pendown": brush_space}
-        # )
-        self.action_space = spaces.Box(
-            np.array([-0.3,-0.3,-0.3,-math.pi,0,-3,0]),
-            np.array([0.3,0.3,0.3,math.pi,50,3,1])
+        color_space = spaces.Box(
+            np.array([-0.3, -0.3, -0.3]), np.array([0.3, 0.3, 0.3])
+        )  # (hue, saturation, value)
+        motion_space = spaces.Box(
+            np.array([-math.pi/4, 0, -3, 0]), np.array([math.pi/4, 10, 3, 1])
+        )  # (direction, distance, radius, pendown)
+        # brush_space = spaces.Box(np.array([0]),np.array([1]))  # (pen up, pen down)
+        self.action_space = spaces.Dict(
+            {"color": color_space, "motion": motion_space}
         )
+
+        self.action_space = spaces.flatten_space(self.action_space)
 
         # -- OBSERVATION SPACE -- #
         # ----------------------- #
 
         img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
-        brush_space = spaces.Discrete(1)
-        motion_space = spaces.Box(np.array([0, 1]), np.array([2 * math.pi, 10]))
-        color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]))
+        color_space = spaces.Box(np.array([0.01, 0.01, 0.01]), np.array([1, 1, 1]), dtype=np.float32)
+        motion_space = spaces.Box(np.array([0, 2, 0]), np.array([2 * math.pi, 15, 1]), dtype=np.float32)
+        # brush_space = spaces.Box(np.array([0]),np.array([1]), dtype=np.float32)
 
         self.observation_space = spaces.Dict(
              {
                  "patch": img_patch_space,
                  "color": color_space,
                  "motion": motion_space,
-                 "pendown": brush_space,
              }
         )
-        #self.observation_space = spaces.Box(
-        #    np.array([0,1,0,0,0,0]),
-        #    np.array([2*math.pi,10,1,1,1,1])
-        #)
-        self.observation_space = spaces.flatten_space(self.observation_space)
+
+        # self.observation_space = spaces.flatten_space(self.observation_space)
         
         self.seed()
         self.reset()
@@ -125,6 +122,8 @@ class PaintingEnv(gym.Env):
             self.template, ((pad_h, pad_h), (pad_w, pad_w), (0, 0)), "constant"
         )
         self.canvas = np.zeros_like(self.template, dtype=np.float)
+        # self.template_radial_map = self._compute_radial_gradient(self.template, RADIAL_KSIZE)
+        self._prev_loss = self._compute_loss()
 
     def _get_obs(self):
         """
@@ -137,22 +136,21 @@ class PaintingEnv(gym.Env):
         """
         x, y = self.cur_state["pos"]
 
-        obs = np.zeros((spaces.flatdim(self.observation_space)))
-        obs = np.hstack((
-            self._get_template_patch(x, y).flatten(),
-            self.cur_state["motion"],
-            self.cur_state["color"],
-            self.cur_state["pendown"]
-        ))
+        # obs = np.zeros((spaces.flatdim(self.observation_space)))
+        # obs = np.hstack((
+        #     self._get_template_patch(x, y).flatten(),
+        #     self.cur_state["motion"],
+        #     self.cur_state["color"],
+        #     self.cur_state["pendown"]
+        # ))
 
-        try:
-            assert obs.size == OBS_FRAME_SHAPE[0]*OBS_FRAME_SHAPE[1]*OBS_FRAME_SHAPE[2]+6
-        except:
-            import code
-            code.interact(local=locals())
+        obs = OrderedDict([
+            ('patch', self._get_template_patch(x, y)),
+            ('motion', self.cur_state["motion"]),
+            ('color', self.cur_state["color"]),
+        ])
 
-
-        return np.asarray(obs)
+        return obs
         # obs = OrderedDict()
 
         # obs["patch"] = self._get_template_patch(x, y)
@@ -171,6 +169,20 @@ class PaintingEnv(gym.Env):
         #       x + OBS_FRAME_SHAPE[0] <= self.template.shape[1]
         return self.canvas[y : y + OBS_FRAME_SHAPE[1], x : x + OBS_FRAME_SHAPE[0]]
 
+    def _compute_gradient(self, img, kernel_size):
+        """
+        Computes the gradient of an image with a specified filter size. Returns gradients in the X and Y direction
+        """
+        gx = cv2.Sobel(img, cv2.CV_64F,1,0,ksize=kernel_size)
+        gy = cv2.Sobel(img, cv2.CV_64F,0,1,ksize=kernel_size)
+        return gx, gy
+
+    def _compute_radial_gradient(self, img, kernel_size=5):
+        gx, gy = self._compute_gradient(img, kernel_size)
+        s = np.sqrt(gx**2 + gy**2)
+        angles = np.arccos(gx/s) + np.arcsin(gy/s)
+        return angles
+
     def step(self, action):
         """
         Take action on current state
@@ -178,9 +190,6 @@ class PaintingEnv(gym.Env):
         """
 
         assert self.cur_step <= EPISODE_SIZE
-
-        # compute loss
-        prev_loss = self._compute_loss()
 
         # compute new state
         self._take_action(action)
@@ -192,17 +201,20 @@ class PaintingEnv(gym.Env):
         cur_loss = self._compute_loss()
 
         # compute reward
-        reward = self._get_reward(prev_loss, cur_loss)
+        reward = self._get_reward(self._prev_loss, cur_loss)
+        self._prev_loss = cur_loss
 
         self.cur_step += 1
 
         # terminate if all pixels in canvas are filled or
         # the current step has exceed the steps in one episode
         terminal_state = (
-            self.cur_step > EPISODE_SIZE or self.canvas[self.canvas == 0].size == 0
+            self.cur_step >= EPISODE_SIZE or self.canvas[self.canvas == 0].size == 0
         )
 
         if (terminal_state):
+            # import code
+            # code.interact(local=locals())
             if self.renderer:
                 self.renderer.close_server()
 
@@ -210,12 +222,6 @@ class PaintingEnv(gym.Env):
 
     def _compute_loss(self):
         return np.linalg.norm(self.canvas - self.template)
-
-    def _compute_gradient(img):
-        """
-        Computes the gradient of an image with a specified filter size. Returns gradients in the X and Y direction
-        """
-        pass
 
     def _get_reward(self, prev_loss, cur_loss):
         """
@@ -228,7 +234,7 @@ class PaintingEnv(gym.Env):
         # L_{t} - L_{t+1} where L is the loss at a timestep
         # and t+1 is the current time step
         return prev_loss - cur_loss
-
+ 
         # x, y = self.cur_state["pos"]
         # local_patch = -np.linalg.norm(self._get_template_patch(x, y) - self._get_canvas_patch(x, y))
         # full_reward = -np.linalg.norm(self.template - self.canvas)
@@ -245,8 +251,7 @@ class PaintingEnv(gym.Env):
     def _unflatten_action(self, flat_action):
         return OrderedDict(
             [("color", flat_action[:3]),
-            ("motion", flat_action[3:6]),
-            ("pendown", int(round(flat_action[6])))]
+            ("motion", flat_action[3:7])]
         )
 
     def _take_action(self, action):
@@ -255,7 +260,7 @@ class PaintingEnv(gym.Env):
         action = self._unflatten_action(action)
 
         max_y, max_x = self.template_rgb.shape[0] - 1, self.template_rgb.shape[1] - 1
-        direction, distance, radius = action["motion"]
+        direction, distance, radius, pendown = action["motion"]
         prev_dir = self.cur_state["motion"][0]
         pos_update = np.array(
             [np.cos(direction + prev_dir), np.sin(direction + prev_dir)]
@@ -263,21 +268,25 @@ class PaintingEnv(gym.Env):
         pos_update *= distance  # Multiply by distance
         pos_update = pos_update.astype(int)
 
-        new_direction = self.cur_state["motion"][0] + action["motion"][0]
+        new_direction = prev_dir + direction
         new_direction = new_direction % (math.pi * 2)
-        new_radius = np.clip(self.cur_state["motion"][1] + action["motion"][1], 1, 10)
+        new_radius = np.clip(self.cur_state["motion"][1] + radius, 1, 10)
+        pendown = int(round(self.cur_state["motion"][2])) ^ int(round(pendown))
 
         prev_state = self.cur_state
         new_state = {
             "pos": np.clip(prev_state["pos"] + pos_update, [0, 0], [max_x, max_y]),
-            "motion": np.array([new_direction, new_radius]),
+            "motion": np.array([new_direction, new_radius, pendown]),
             "color": np.clip(prev_state["color"] + action["color"], 0, 1),
-            "pendown": prev_state["pendown"] ^ action["pendown"],
+            # "pendown": prev_state["pendown"] ^ action["pendown"],
         }
 
         self.cur_state = new_state
         self.state_history.append(prev_state)
         self.action_history.append(action)
+
+        if self.cur_step % EPISODE_SIZE == 0:
+            logger.info(str(self.cur_state))
 
         return self.cur_state
 
@@ -288,13 +297,12 @@ class PaintingEnv(gym.Env):
         self.canvas = np.zeros_like(self.template, dtype=np.float)
         self.cur_state = {
             "pos": start_pos,
-            "motion": np.array([0, 1]),
+            "motion": np.array([0, 1, 0]),
             "color": self.template[start_pos[1], start_pos[0]],
-            "pendown": 0,
         }
         self.action_history = []
         self.state_history = []
-        self.cur_step = -1
+        self.cur_step = 0
         return self._get_obs()
 
     def _start_render_process(self):
