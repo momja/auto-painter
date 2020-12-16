@@ -15,19 +15,22 @@ import tensorflow as tf
 from painting_critic_network import PaintingCriticNetwork
 from painting_actor_network import PaintingActorNetwork
 
+import tf_agents
 from tf_agents.agents.ddpg import ddpg_agent
 from tf_agents.agents.sac import sac_agent
 from tf_agents.agents.sac import tanh_normal_projection_network
 from tf_agents.environments import suite_gym
 from tf_agents.environments.utils import validate_py_environment
+from tf_agents.environments.tf_py_environment import TFPyEnvironment
 from tf_agents.experimental.train import actor
 from tf_agents.experimental.train import learner
 from tf_agents.experimental.train import triggers
 from tf_agents.experimental.train.utils import spec_utils
 from tf_agents.experimental.train.utils import strategy_utils
 from tf_agents.experimental.train.utils import train_utils
+
 from tf_agents.metrics import py_metrics
-from tf_agents.networks import actor_distribution_network
+from tf_agents.networks import actor_distribution_network, nest_map, sequential
 from tf_agents.policies import greedy_policy
 from tf_agents.policies import py_tf_eager_policy
 from tf_agents.policies import random_py_policy
@@ -38,9 +41,11 @@ tempdir = tempfile.gettempdir()
 
 env_name = "Painter-v0"
 collect_env = suite_gym.load(env_name)
+# collect_env = TFPyEnvironment(collect_env)
 eval_env = suite_gym.load(env_name)
+# eval_env = TFPyEnvironment(eval_env)
 
-validate_py_environment(collect_env)
+# validate_py_environment(collect_env)
 
 reverb_port = 8080
 
@@ -48,21 +53,23 @@ reverb_port = 8080
 # 1e5 is just so this doesn't take too long (1 hr)
 num_iterations = 10000  # @param {type:"integer"}
 
-initial_collect_steps = 10000  # @param {type:"integer"}
+# initial_collect_steps = 10000  # @param {type:"integer"}
+initial_collect_steps = 100
 collect_steps_per_iteration = 1  # @param {type:"integer"}
 replay_buffer_capacity = 10000  # @param {type:"integer"}
 
-batch_size = 256  # @param {type:"integer"}
+batch_size = 1  # @param {type:"integer"}
 
-critic_learning_rate = 1e-4  # @param {type:"number"}
-actor_learning_rate = 1e-4  # @param {type:"number"}
+critic_learning_rate = 1e-3  # @param {type:"number"}
+actor_learning_rate = 1e-3  # @param {type:"number"}
+alpha_learning_rate = 1e-3
 target_update_tau = 0.005  # @param {type:"number"}
 target_update_period = 1  # @param {type:"number"}
 gamma = 0.99  # @param {type:"number"}
 reward_scale_factor = 1.0  # @param {type:"number"}
 
 actor_fc_layer_params = (256, 256)
-critic_joint_fc_layer_params = (256, 256)
+# critic_joint_fc_layer_params = (256, 256)
 
 log_interval = 1000  # @param {type:"integer"}
 
@@ -83,15 +90,16 @@ observation_spec, action_spec, time_step_spec = spec_utils.get_tensor_specs(coll
 # - pendown: (1)
 
 # patch_pre_layer = tf.keras.layers.Conv2D(32, (3,3), padding="same", activation="relu")
-patch_pre_layer = tf.keras.models.Sequential(
-    [
-        tf.keras.layers.Conv2D(16, 3),
-        tf.keras.layers.MaxPooling2D(),
-        tf.keras.layers.Flatten(),
-    ]
-)
-color_pre_layer = tf.keras.layers.Dense(5)
-motion_pre_layer = tf.keras.layers.Dense(5)
+# patch_pre_layer = tf.keras.models.Sequential(
+#     [
+#         tf.keras.layers.Conv2D(8, 3),
+#         tf.keras.layers.MaxPool2D(),
+#         tf_agents.keras_layers.inner_reshape.InnerReshape([None]*3, [-1]),
+#     ]
+# )
+patch_pre_layer = tf_agents.keras_layers.inner_reshape.InnerReshape([None,None,3], [-1])
+color_pre_layer = tf_agents.keras_layers.inner_reshape.InnerReshape([None], [-1])
+motion_pre_layer = tf_agents.keras_layers.inner_reshape.InnerReshape([None], [-1])
 preprocessing_layers = OrderedDict(
     [
         ("patch", patch_pre_layer),
@@ -100,19 +108,45 @@ preprocessing_layers = OrderedDict(
     ]
 )
 
+def create_sequential_critic_net():
+  value_layer_dict = {
+          "patch": patch_pre_layer,
+          "color": color_pre_layer,
+          "motion": motion_pre_layer
+  }
+#   value_layer = sequential.Sequential([
+#       value_layer_dict,
+#       tf.keras.layers.Lambda(tf.nest.flatten),
+#       tf.keras.layers.Concatenate(),
+#       tf.keras.layers.Dense(1)])
+
+  action_layer = tf.keras.layers.Dense(81)
+
+  def sum_value_and_action_out(value_and_action_out):
+    value_out_dict, action_out = value_and_action_out
+    value_out = tf.concat(tf.nest.flatten(value_out_dict), axis=-1)
+    # value_out = value_out_dict
+    return tf.reshape(value_out + action_out, [1,-1])
+
+  return sequential.Sequential([
+      nest_map.NestMap((value_layer_dict, action_layer)),
+      tf.keras.layers.Lambda(sum_value_and_action_out),
+      tf.keras.layers.Dense(1)
+  ])
+
 preprocessing_combiner = tf.keras.layers.Concatenate(axis=-1)
 
-with strategy.scope():
-    critic_net = PaintingCriticNetwork(
-        (observation_spec, action_spec),
-        observation_fc_layer_params=None,
-        action_fc_layer_params=None,
-        joint_fc_layer_params=critic_joint_fc_layer_params,
-        kernel_initializer="glorot_uniform",
-        last_kernel_initializer="glorot_uniform",
-        preprocessing_layers=preprocessing_layers,
-        preprocessing_combiner=preprocessing_combiner,
-    )
+# with strategy.scope():
+#     critic_net = PaintingCriticNetwork(
+#         (observation_spec, action_spec),
+#         observation_fc_layer_params=None,
+#         action_fc_layer_params=None,
+#         joint_fc_layer_params=critic_joint_fc_layer_params,
+#         kernel_initializer="glorot_uniform",
+#         last_kernel_initializer="glorot_uniform",
+#         preprocessing_layers=preprocessing_layers,
+#         preprocessing_combiner=preprocessing_combiner,
+#     )
 
 with strategy.scope():
     actor_net = PaintingActorNetwork(
@@ -125,42 +159,50 @@ with strategy.scope():
 
 with strategy.scope():
     train_step = train_utils.create_train_step()
-
+    tf_agent = sac_agent.SacAgent(
+          time_step_spec,
+          action_spec,
+          actor_network=actor_net,
+          critic_network=create_sequential_critic_net(),
+          actor_optimizer=tf.compat.v1.train.AdamOptimizer(
+              learning_rate=actor_learning_rate),
+          critic_optimizer=tf.compat.v1.train.AdamOptimizer(
+              learning_rate=critic_learning_rate),
+          alpha_optimizer=tf.compat.v1.train.AdamOptimizer(
+              learning_rate=alpha_learning_rate),
+          target_update_tau=target_update_tau,
+          target_update_period=target_update_period,
+          td_errors_loss_fn=tf.math.squared_difference,
+          gamma=gamma,
+          reward_scale_factor=reward_scale_factor,
+          train_step_counter=train_step)
     # tf_agent = sac_agent.SacAgent(
-    #       time_step_spec,
-    #       action_spec,
-    #       actor_network=actor_net,
-    #       critic_network=critic_net,
-    #       actor_optimizer=tf.compat.v1.train.AdamOptimizer(
-    #           learning_rate=actor_learning_rate),
-    #       critic_optimizer=tf.compat.v1.train.AdamOptimizer(
-    #           learning_rate=critic_learning_rate),
-    #       alpha_optimizer=tf.compat.v1.train.AdamOptimizer(
-    #           learning_rate=alpha_learning_rate),
-    #       target_update_tau=target_update_tau,
-    #       target_update_period=target_update_period,
-    #       td_errors_loss_fn=tf.math.squared_difference,
-    #       gamma=gamma,
-    #       reward_scale_factor=reward_scale_factor,
-    #       train_step_counter=train_step)
-    tf_agent = ddpg_agent.DdpgAgent(
-        time_step_spec,
-        action_spec,
-        actor_network=actor_net,
-        critic_network=critic_net,
-        actor_optimizer=tf.compat.v1.train.AdamOptimizer(
-            learning_rate=actor_learning_rate
-        ),
-        critic_optimizer=tf.compat.v1.train.AdamOptimizer(
-            learning_rate=critic_learning_rate
-        ),
-        target_update_tau=target_update_tau,
-        target_update_period=target_update_period,
-        td_errors_loss_fn=tf.math.squared_difference,
-        gamma=gamma,
-        reward_scale_factor=reward_scale_factor,
-        train_step_counter=train_step,
-    )
+    #     time_step_spec,
+    #     action_spec,
+    #     critic_network=create_sequential_critic_net(),
+    #     actor_network=None,
+    #     actor_optimizer=None,
+    #     critic_optimizer=None,
+    #     alpha_optimizer=None,
+    # )
+    # tf_agent = ddpg_agent.DdpgAgent(
+    #     time_step_spec,
+    #     action_spec,
+    #     actor_network=actor_net,
+    #     critic_network=critic_net,
+    #     actor_optimizer=tf.compat.v1.train.AdamOptimizer(
+    #         learning_rate=actor_learning_rate
+    #     ),
+    #     critic_optimizer=tf.compat.v1.train.AdamOptimizer(
+    #         learning_rate=critic_learning_rate
+    #     ),
+    #     target_update_tau=target_update_tau,
+    #     target_update_period=target_update_period,
+    #     td_errors_loss_fn=tf.math.squared_difference,
+    #     gamma=gamma,
+    #     reward_scale_factor=reward_scale_factor,
+    #     train_step_counter=train_step,
+    # )
 
     tf_agent.initialize()
 
@@ -314,8 +356,6 @@ with imageio.get_writer(video_filename, fps=60) as video:
         time_step = eval_env.reset()
         video.append_data(eval_env.render())
         while not time_step.is_last():
-            import code
-            code.interact(local=locals())
             action_step = eval_actor.policy.action(time_step)
             time_step = eval_env.step(action_step.action)
             video.append_data(eval_env.render())

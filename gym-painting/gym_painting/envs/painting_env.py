@@ -19,7 +19,7 @@ from gym_painting.envs.painter import Painter
 logger = logging.getLogger(__name__)
 
 
-OBS_FRAME_SHAPE = (35, 35, 3)  # Area around the current position that the user can view
+OBS_FRAME_SHAPE = (5, 5, 3)  # Area around the current position that the user can view
 EPISODE_SIZE = 200
 RADIAL_KSIZE = 5
 
@@ -56,7 +56,7 @@ class PaintingEnv(gym.Env):
             np.array([-0.3, -0.3, -0.3]), np.array([0.3, 0.3, 0.3])
         )  # (hue, saturation, value)
         motion_space = spaces.Box(
-            np.array([-math.pi/4, 0, -3, 0]), np.array([math.pi/4, 10, 3, 1])
+            np.array([-math.pi/4, 1, -3, 0]), np.array([math.pi/4, 10, 3, 1])
         )  # (direction, distance, radius, pendown)
         # brush_space = spaces.Box(np.array([0]),np.array([1]))  # (pen up, pen down)
         self.action_space = spaces.Dict(
@@ -69,8 +69,8 @@ class PaintingEnv(gym.Env):
         # ----------------------- #
 
         img_patch_space = spaces.Box(low=0, high=1, shape=OBS_FRAME_SHAPE)
-        color_space = spaces.Box(np.array([0.01, 0.01, 0.01]), np.array([1, 1, 1]), dtype=np.float32)
-        motion_space = spaces.Box(np.array([0, 2, 0]), np.array([2 * math.pi, 15, 1]), dtype=np.float32)
+        color_space = spaces.Box(np.array([0, 0, 0]), np.array([1, 1, 1]), dtype=np.float32)
+        motion_space = spaces.Box(np.array([0, 0, 0]), np.array([2 * math.pi, 15, 1]), dtype=np.float32)
         # brush_space = spaces.Box(np.array([0]),np.array([1]), dtype=np.float32)
 
         self.observation_space = spaces.Dict(
